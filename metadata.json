@@ -1,0 +1,6 @@
+{
+  "name": "WomenSafe AI",
+  "description": "AI-assisted women safety risk assessment platform analyzing environmental and location factors to provide explainable safety risk estimates.",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
