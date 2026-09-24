@@ -36,9 +36,9 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({ token, onResultG
   const dayName = now.toLocaleDateString('en-US', { weekday: 'long' });
 
   // Form State
-  const [locationName, setLocationName] = useState('Liberty Market & Main Boulevard, Gulberg, Lahore');
-  const [latitude, setLatitude] = useState(31.5126);
-  const [longitude, setLongitude] = useState(74.3444);
+  const [locationName, setLocationName] = useState('');
+  const [latitude, setLatitude] = useState<number | undefined>(undefined);
+  const [longitude, setLongitude] = useState<number | undefined>(undefined);
   const [date, setDate] = useState(todayStr);
   const [time, setTime] = useState(currentTimeStr);
   const [day, setDay] = useState(dayName);
@@ -81,12 +81,13 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({ token, onResultG
     setLocationName(name);
     setLatitude(lat);
     setLongitude(lng);
+    setErrorMessage('');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!locationName.trim()) {
-      setErrorMessage('Please select or specify a location on the map.');
+    if (!locationName.trim() || latitude === undefined || longitude === undefined) {
+      setErrorMessage('Please click "Detect My Real Location", enter a location manually, or select a point on the map.');
       return;
     }
 
@@ -249,6 +250,7 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({ token, onResultG
                 value={date}
                 onChange={(e) => handleDateChange(e.target.value)}
                 className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-rose-500 focus:bg-white"
+                style={{ color: '#05090d' }}
                 required
               />
             </div>
@@ -263,6 +265,7 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({ token, onResultG
                 value={time}
                 onChange={(e) => setTime(e.target.value)}
                 className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-rose-500 focus:bg-white"
+                style={{ color: '#030b14' }}
                 required
               />
             </div>
@@ -277,6 +280,7 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({ token, onResultG
                 value={day}
                 readOnly
                 className="w-full px-3 py-2 text-sm bg-slate-100 border border-slate-200 rounded-lg text-slate-600 font-medium cursor-not-allowed"
+                style={{ color: '#030912' }}
               />
             </div>
           </div>

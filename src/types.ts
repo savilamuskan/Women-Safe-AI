@@ -9,6 +9,7 @@ export interface User {
   email: string;
   role: 'user' | 'admin';
   created_at: string;
+  adminVerified?: boolean;
 }
 
 export interface AuthState {

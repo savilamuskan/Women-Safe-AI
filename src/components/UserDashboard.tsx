@@ -17,6 +17,8 @@ import {
   TrendingDown,
   AlertTriangle,
   RefreshCw,
+  UserCog,
+  ShieldAlert,
 } from 'lucide-react';
 import { AssessmentRecord, User } from '../types.ts';
 
@@ -25,6 +27,8 @@ interface UserDashboardProps {
   token: string | null;
   onNewAssessment: () => void;
   onSelectRecord: (record: AssessmentRecord) => void;
+  onOpenEditProfile?: () => void;
+  onOpenAdminPin?: () => void;
 }
 
 export const UserDashboard: React.FC<UserDashboardProps> = ({
@@ -32,6 +36,8 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   token,
   onNewAssessment,
   onSelectRecord,
+  onOpenEditProfile,
+  onOpenAdminPin,
 }) => {
   const [records, setRecords] = useState<AssessmentRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -119,6 +125,26 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
+          {onOpenAdminPin && (
+            <button
+              onClick={onOpenAdminPin}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/50 rounded-xl text-xs sm:text-sm font-semibold transition-colors shadow-xs"
+              title="Access Admin Portal"
+            >
+              <ShieldAlert className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+              <span>Admin Portal</span>
+            </button>
+          )}
+          {onOpenEditProfile && (
+            <button
+              onClick={onOpenEditProfile}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 rounded-xl text-xs sm:text-sm font-semibold transition-colors shadow-xs"
+              title="Edit Profile & Account Name"
+            >
+              <UserCog className="w-4 h-4 text-slate-500" />
+              <span className="hidden sm:inline">Edit Profile</span>
+            </button>
+          )}
           <button
             onClick={fetchHistory}
             className="p-2.5 bg-white border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-50 transition-colors shadow-xs"

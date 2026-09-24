@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { AssessmentInput, ContributingFactor, RiskResult } from '../types.ts';
+import type { AssessmentInput, ContributingFactor, RiskResult } from '../types.ts';
 
 /**
  * WomenSafe AI - Machine Learning Risk Prediction Engine

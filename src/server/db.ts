@@ -6,7 +6,7 @@
 import fs from 'fs';
 import path from 'path';
 import bcrypt from 'bcryptjs';
-import { RiskAssessmentRecord, SystemStats, User } from '../types.ts';
+import type { RiskAssessmentRecord, SystemStats, User } from '../types.ts';
 
 interface StoredUser extends User {
   password_hash: string;
@@ -268,6 +268,42 @@ export function createUser(name: string, email: string, passwordHash: string, ro
 
   const { password_hash, ...publicUser } = newUser;
   return publicUser;
+}
+
+export function updateUser(
+  id: string,
+  updates: {
+    name?: string;
+    email?: string;
+    passwordHash?: string;
+    role?: 'user' | 'admin';
+  }
+): User | null {
+  const db = readDb();
+  const index = db.users.findIndex((u) => u.id === id);
+  if (index === -1) return null;
+
+  if (updates.name !== undefined && updates.name.trim().length > 0) {
+    db.users[index].name = updates.name.trim();
+  }
+  if (updates.email !== undefined && updates.email.trim().length > 0) {
+    db.users[index].email = updates.email.trim().toLowerCase();
+  }
+  if (updates.passwordHash !== undefined && updates.passwordHash.length > 0) {
+    db.users[index].password_hash = updates.passwordHash;
+  }
+  if (updates.role !== undefined) {
+    db.users[index].role = updates.role;
+  }
+
+  writeDb(db);
+  const { password_hash, ...publicUser } = db.users[index];
+  return publicUser;
+}
+
+export function getAllUsers(): User[] {
+  const db = readDb();
+  return db.users.map(({ password_hash, ...u }) => u);
 }
 
 // Assessment Operations

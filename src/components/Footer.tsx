@@ -24,7 +24,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate, onOpenEmergency }) =
               </div>
               <span>WomenSafe AI</span>
             </div>
-            <p className="text-slate-400 max-w-md leading-relaxed">
+            <p className="text-slate-400 max-w-md leading-relaxed" style={{ color: '#dde3ed' }}>
               Empowering women and vulnerable pedestrians through explainable machine learning risk modeling, Crime
               Prevention Through Environmental Design (CPTED) frameworks, and actionable spatial safety recommendations.
             </p>
@@ -45,17 +45,29 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate, onOpenEmergency }) =
                 </button>
               </li>
               <li>
-                <button onClick={() => onNavigate('assess')} className="hover:text-white transition-colors">
+                <button
+                  onClick={() => onNavigate('assess')}
+                  className="hover:text-white transition-colors"
+                  style={{ color: '#dee4ed' }}
+                >
                   Risk Assessment Form
                 </button>
               </li>
               <li>
-                <button onClick={() => onNavigate('how-it-works')} className="hover:text-white transition-colors">
+                <button
+                  onClick={() => onNavigate('how-it-works')}
+                  className="hover:text-white transition-colors"
+                  style={{ color: '#dee5ee' }}
+                >
                   Methodology & How It Works
                 </button>
               </li>
               <li>
-                <button onClick={() => onNavigate('guidelines')} className="hover:text-white transition-colors">
+                <button
+                  onClick={() => onNavigate('guidelines')}
+                  className="hover:text-white transition-colors"
+                  style={{ color: '#e2e7ef' }}
+                >
                   Safety Guidelines & Protocols
                 </button>
               </li>
@@ -86,7 +98,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate, onOpenEmergency }) =
 
         {/* Legal Disclaimer */}
         <div className="pt-6 border-t border-slate-800 text-[11px] text-slate-500 leading-relaxed space-y-2">
-          <p>
+          <p style={{ color: '#e4eaf2' }}>
             <strong className="text-slate-400">Disclaimer:</strong> WomenSafe AI provides an evidence-informed statistical
             estimate of physical environmental vulnerability (lighting, natural surveillance, emergency proximity) for
             informational and personal awareness purposes only. The platform does not claim to predict criminal incidents

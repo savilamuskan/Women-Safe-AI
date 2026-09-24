@@ -16,8 +16,11 @@ import { UserDashboard } from './components/UserDashboard.tsx';
 import { AdminDashboard } from './components/AdminDashboard.tsx';
 import { AuthModal } from './components/AuthModal.tsx';
 import { EmergencyModal } from './components/EmergencyModal.tsx';
+import { EditProfileModal } from './components/EditProfileModal.tsx';
 import { Footer } from './components/Footer.tsx';
+import { AdminPinModal } from './components/AdminPinModal.tsx';
 import { User, RiskResult, AssessmentRecord } from './types.ts';
+import { ThemeProvider } from './context/ThemeContext.tsx';
 
 export default function App() {
   const [currentView, setCurrentView] = useState<string>('landing');
@@ -27,7 +30,9 @@ export default function App() {
   // Modals state
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [authInitialTab, setAuthInitialTab] = useState<'login' | 'register'>('login');
+  const [adminPinModalOpen, setAdminPinModalOpen] = useState(false);
   const [emergencyModalOpen, setEmergencyModalOpen] = useState(false);
+  const [editProfileModalOpen, setEditProfileModalOpen] = useState(false);
   const [activeRiskResult, setActiveRiskResult] = useState<RiskResult | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -45,8 +50,15 @@ export default function App() {
     const savedUser = localStorage.getItem('womensafe_user');
     if (savedToken && savedUser) {
       try {
+        const parsedUser = JSON.parse(savedUser);
+        try {
+          const payload = JSON.parse(atob(savedToken.split('.')[1]));
+          if (payload.adminVerified) {
+            parsedUser.adminVerified = true;
+          }
+        } catch {}
         setToken(savedToken);
-        setUser(JSON.parse(savedUser));
+        setUser(parsedUser);
       } catch {
         localStorage.removeItem('womensafe_jwt');
         localStorage.removeItem('womensafe_user');
@@ -59,6 +71,26 @@ export default function App() {
     setAuthModalOpen(true);
   };
 
+  const handleOpenAdminPin = () => {
+    if (!user) {
+      handleOpenAuth('login');
+      return;
+    }
+    setAdminPinModalOpen(true);
+  };
+
+  const handleAdminPinSuccess = (updatedUser: User, newToken: string) => {
+    setUser(updatedUser);
+    if (newToken) {
+      setToken(newToken);
+      localStorage.setItem('womensafe_jwt', newToken);
+    }
+    localStorage.setItem('womensafe_user', JSON.stringify(updatedUser));
+    setAdminPinModalOpen(false);
+    setCurrentView('admin');
+    showToast('Admin Security PIN verified by server. Access granted!');
+  };
+
   const handleAuthSuccess = (authenticatedUser: User, jwtToken: string) => {
     setUser(authenticatedUser);
     setToken(jwtToken);
@@ -67,7 +99,7 @@ export default function App() {
     setAuthModalOpen(false);
     showToast(`Welcome, ${authenticatedUser.name}!`);
 
-    if (authenticatedUser.role === 'admin') {
+    if (authenticatedUser.role === 'admin' && authenticatedUser.adminVerified) {
       setCurrentView('admin');
     } else {
       setCurrentView('dashboard');
@@ -110,8 +142,9 @@ export default function App() {
   };
 
   return (
-    <div id="womensafe-root" className="min-h-screen flex flex-col bg-white text-slate-900 font-sans antialiased selection:bg-rose-100 selection:text-rose-900">
-      {/* Toast Notification */}
+    <ThemeProvider>
+      <div id="womensafe-root" className="min-h-screen flex flex-col bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans antialiased selection:bg-rose-100 selection:text-rose-900 transition-colors duration-200">
+        {/* Toast Notification */}
       {toastMessage && (
         <div className="fixed top-20 right-4 z-50 bg-slate-900 text-white px-4 py-3 rounded-xl shadow-xl text-xs font-semibold flex items-center gap-2 border border-slate-700 animate-in fade-in slide-in-from-top-4">
           <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping" />
@@ -127,6 +160,8 @@ export default function App() {
         onOpenAuth={handleOpenAuth}
         onLogout={handleLogout}
         onOpenEmergency={() => setEmergencyModalOpen(true)}
+        onOpenEditProfile={() => setEditProfileModalOpen(true)}
+        onOpenAdminPin={handleOpenAdminPin}
       />
 
       {/* Main Content Router */}
@@ -174,6 +209,8 @@ export default function App() {
             token={token}
             onNewAssessment={() => setCurrentView('assess')}
             onSelectRecord={handleSelectRecord}
+            onOpenEditProfile={() => setEditProfileModalOpen(true)}
+            onOpenAdminPin={handleOpenAdminPin}
           />
         )}
 
@@ -182,6 +219,15 @@ export default function App() {
             user={user}
             token={token}
             onSelectRecord={handleSelectRecord}
+            onUpdateUser={(updatedUser, newToken) => {
+              setUser(updatedUser);
+              if (newToken) {
+                setToken(newToken);
+                localStorage.setItem('womensafe_jwt', newToken);
+              }
+              localStorage.setItem('womensafe_user', JSON.stringify(updatedUser));
+              showToast(`Account updated: ${updatedUser.name}`);
+            }}
           />
         )}
       </main>
@@ -201,6 +247,32 @@ export default function App() {
           initialTab={authInitialTab}
           onClose={() => setAuthModalOpen(false)}
           onAuthSuccess={handleAuthSuccess}
+        />
+      )}
+
+      <AdminPinModal
+        isOpen={adminPinModalOpen}
+        onClose={() => setAdminPinModalOpen(false)}
+        token={token}
+        user={user}
+        onSuccess={handleAdminPinSuccess}
+      />
+
+      {user && (
+        <EditProfileModal
+          user={user}
+          token={token}
+          isOpen={editProfileModalOpen}
+          onClose={() => setEditProfileModalOpen(false)}
+          onUserUpdated={(updatedUser, newToken) => {
+            setUser(updatedUser);
+            if (newToken) {
+              setToken(newToken);
+              localStorage.setItem('womensafe_jwt', newToken);
+            }
+            localStorage.setItem('womensafe_user', JSON.stringify(updatedUser));
+            showToast(`Profile updated: ${updatedUser.name}`);
+          }}
         />
       )}
 
@@ -230,6 +302,7 @@ export default function App() {
           }}
         />
       )}
-    </div>
+      </div>
+    </ThemeProvider>
   );
 }
