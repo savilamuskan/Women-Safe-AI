@@ -23,6 +23,7 @@ import {
   ShieldCheck,
   Edit2,
   KeyRound,
+  Trash2,
 } from 'lucide-react';
 import { SystemStats, AssessmentRecord, User } from '../types.ts';
 import { EditProfileModal } from './EditProfileModal.tsx';
@@ -145,6 +146,31 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setUsersList((prev) => prev.map((u) => (u.id === updatedUser.id ? updatedUser : u)));
     setEditProfileOpen(false);
     setEditingTargetUser(null);
+  };
+
+  const handleDeleteUser = async (targetUser: User) => {
+    if (targetUser.id === user.id) {
+      alert('You cannot delete your own admin account while logged in.');
+      return;
+    }
+    const confirmed = window.confirm(
+      `Are you sure you want to permanently delete the user account "${targetUser.name}" (${targetUser.email}) and all associated records?`
+    );
+    if (!confirmed) return;
+
+    try {
+      const res = await fetch(`/api/admin/users/${targetUser.id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed to delete user');
+      }
+      setUsersList((prev) => prev.filter((u) => u.id !== targetUser.id));
+    } catch (err: any) {
+      alert(err.message || 'Failed to delete user account');
+    }
   };
 
   const handleRetrain = async () => {
@@ -590,16 +616,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </td>
                       <td className="px-6 py-3.5 font-mono text-slate-400 text-[11px]">{u.id}</td>
                       <td className="px-6 py-3.5 text-right">
-                        <button
-                          onClick={() => {
-                            setEditingTargetUser(u);
-                            setEditProfileOpen(true);
-                          }}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-rose-50 hover:text-rose-700 text-slate-700 font-semibold rounded-lg transition-colors text-xs"
-                        >
-                          <Edit2 className="w-3 h-3" />
-                          <span>Edit Name / Credentials</span>
-                        </button>
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={() => {
+                              setEditingTargetUser(u);
+                              setEditProfileOpen(true);
+                            }}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg transition-colors text-xs"
+                          >
+                            <Edit2 className="w-3 h-3" />
+                            <span>Edit</span>
+                          </button>
+                          {u.id !== user.id && (
+                            <button
+                              onClick={() => handleDeleteUser(u)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 font-semibold rounded-lg transition-colors text-xs"
+                              title="Delete User Account"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                              <span>Delete</span>
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}

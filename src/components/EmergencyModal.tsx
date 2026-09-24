@@ -27,6 +27,7 @@ import {
   Navigation,
   Plus,
 } from 'lucide-react';
+import { EmergencyOfflineMap } from './EmergencyOfflineMap';
 
 interface EmergencyModalProps {
   onClose: () => void;
@@ -372,6 +373,7 @@ export const EmergencyModal: React.FC<EmergencyModalProps> = ({
   // Manual Location override
   const [isEditingLocation, setIsEditingLocation] = useState(false);
   const [manualLocationInput, setManualLocationInput] = useState('');
+  const [showEmergencyMap, setShowEmergencyMap] = useState<boolean>(true);
 
   // Editable SOS Distress Message State
   const [sosMessage, setSosMessage] = useState<string>('');
@@ -511,8 +513,34 @@ export const EmergencyModal: React.FC<EmergencyModalProps> = ({
     setDetectedLocationName(trimmed);
     setLocationSource('manual');
     setIsEditingLocation(false);
+
+    // Approximate center coordinates for common cities to re-orient the map and tile cache
+    const lower = trimmed.toLowerCase();
+    const cityCoords: Record<string, { lat: number; lng: number }> = {
+      lahore: { lat: 31.5204, lng: 74.3587 },
+      karachi: { lat: 24.8607, lng: 67.0011 },
+      islamabad: { lat: 33.6844, lng: 73.0479 },
+      rawalpindi: { lat: 33.5651, lng: 73.0169 },
+      faisalabad: { lat: 31.4504, lng: 73.1350 },
+      multan: { lat: 30.1575, lng: 71.5249 },
+      peshawar: { lat: 34.0151, lng: 71.5249 },
+      quetta: { lat: 30.1798, lng: 66.9750 },
+      london: { lat: 51.5074, lng: -0.1278 },
+      dubai: { lat: 25.2048, lng: 55.2708 },
+    };
+
+    let matchedCoords = currentCoords;
+    for (const [cityName, c] of Object.entries(cityCoords)) {
+      if (lower.includes(cityName)) {
+        matchedCoords = { lat: c.lat, lng: c.lng, accuracy: 60 };
+        setCurrentCoords(matchedCoords);
+        setCoordinatesText(`Lat: ${c.lat.toFixed(5)}, Lng: ${c.lng.toFixed(5)}`);
+        break;
+      }
+    }
+
     if (!isUserEdited) {
-      setSosMessage(buildDefaultSOSMessage(trimmed, coordinatesText, currentCoords, activeRegionCode));
+      setSosMessage(buildDefaultSOSMessage(trimmed, coordinatesText, matchedCoords, activeRegionCode));
     }
   };
 
@@ -823,6 +851,19 @@ export const EmergencyModal: React.FC<EmergencyModalProps> = ({
               <div className="flex items-center gap-1.5 shrink-0">
                 <button
                   type="button"
+                  onClick={() => setShowEmergencyMap(!showEmergencyMap)}
+                  className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-lg border transition-colors ${
+                    showEmergencyMap
+                      ? 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800 shadow-xs'
+                      : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
+                  }`}
+                  title="Toggle offline-cached emergency map with live spatial context"
+                >
+                  <Compass className="w-3 h-3 text-rose-500" />
+                  <span>{showEmergencyMap ? 'Hide Map' : 'Offline Map'}</span>
+                </button>
+                <button
+                  type="button"
                   onClick={() => setIsEditingLocation(!isEditingLocation)}
                   className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 px-2.5 py-1 rounded-lg transition-colors"
                 >
@@ -917,6 +958,15 @@ export const EmergencyModal: React.FC<EmergencyModalProps> = ({
               </div>
             </div>
           </div>
+
+          {/* Interactive Emergency Map with Offline Tile Caching Resiliency */}
+          {showEmergencyMap && (
+            <EmergencyOfflineMap
+              coordinates={currentCoords}
+              locationName={detectedLocationName}
+              regionCode={activeRegionCode}
+            />
+          )}
 
           {/* Audio Siren Beacon Button */}
           <div className="p-3.5 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 rounded-xl flex items-center justify-between gap-3">

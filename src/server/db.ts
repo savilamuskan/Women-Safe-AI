@@ -306,6 +306,19 @@ export function getAllUsers(): User[] {
   return db.users.map(({ password_hash, ...u }) => u);
 }
 
+export function deleteUser(id: string): boolean {
+  const db = readDb();
+  const initialCount = db.users.length;
+  db.users = db.users.filter((u) => u.id !== id);
+  // Also remove user's personal assessments if any
+  db.risk_assessments = db.risk_assessments.filter((a) => a.user_id !== id);
+  const changed = db.users.length !== initialCount;
+  if (changed) {
+    writeDb(db);
+  }
+  return changed;
+}
+
 // Assessment Operations
 export function saveAssessment(assessment: Omit<RiskAssessmentRecord, 'id' | 'created_at'>): RiskAssessmentRecord {
   const db = readDb();

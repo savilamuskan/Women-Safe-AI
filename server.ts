@@ -14,6 +14,7 @@ import { evaluateRisk } from './src/server/ml-engine.ts';
 import {
   createUser,
   deleteAssessment,
+  deleteUser,
   findUserByEmail,
   findUserById,
   getAllAssessments,
@@ -694,6 +695,23 @@ app.put('/api/admin/users/:id', authenticateToken, requireAdmin, (req, res) => {
   } catch (err: any) {
     console.error('Admin update user error:', err);
     res.status(500).json({ error: 'Failed to update user account' });
+  }
+});
+
+app.delete('/api/admin/users/:id', authenticateToken, requireAdmin, (req: AuthenticatedRequest, res) => {
+  try {
+    const targetId = req.params.id;
+    if (req.user?.id === targetId) {
+      return res.status(400).json({ error: 'Cannot delete the currently logged in administrator account' });
+    }
+    const success = deleteUser(targetId);
+    if (!success) {
+      return res.status(404).json({ error: 'User account not found' });
+    }
+    res.json({ message: 'User account and associated records deleted successfully' });
+  } catch (err: any) {
+    console.error('Delete user error:', err);
+    res.status(500).json({ error: 'Failed to delete user account' });
   }
 });
 

@@ -44,25 +44,45 @@ export default function App() {
     }, 3500);
   };
 
-  // Restore session from localStorage on mount
+  // Restore session from localStorage on mount & validate strictly against database
   useEffect(() => {
     const savedToken = localStorage.getItem('womensafe_jwt');
     const savedUser = localStorage.getItem('womensafe_user');
+
     if (savedToken && savedUser) {
-      try {
-        const parsedUser = JSON.parse(savedUser);
-        try {
-          const payload = JSON.parse(atob(savedToken.split('.')[1]));
-          if (payload.adminVerified) {
-            parsedUser.adminVerified = true;
+      // Validate with server that this user account still exists in the database
+      fetch('/api/auth/me', {
+        headers: { Authorization: `Bearer ${savedToken}` },
+      })
+        .then(async (res) => {
+          if (!res.ok) {
+            // Account was cleared/purged from database or token expired
+            localStorage.removeItem('womensafe_jwt');
+            localStorage.removeItem('womensafe_user');
+            setUser(null);
+            setToken(null);
+          } else {
+            const data = await res.json();
+            if (data?.user) {
+              try {
+                const payload = JSON.parse(atob(savedToken.split('.')[1]));
+                if (payload.adminVerified) {
+                  data.user.adminVerified = true;
+                }
+              } catch {}
+              setUser(data.user);
+              setToken(savedToken);
+              localStorage.setItem('womensafe_user', JSON.stringify(data.user));
+            }
           }
-        } catch {}
-        setToken(savedToken);
-        setUser(parsedUser);
-      } catch {
-        localStorage.removeItem('womensafe_jwt');
-        localStorage.removeItem('womensafe_user');
-      }
+        })
+        .catch(() => {
+          // In case of error, purge local session to ensure clean state
+          localStorage.removeItem('womensafe_jwt');
+          localStorage.removeItem('womensafe_user');
+          setUser(null);
+          setToken(null);
+        });
     }
   }, []);
 
