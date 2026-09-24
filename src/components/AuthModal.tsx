@@ -62,6 +62,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     setPassword('password123');
   };
 
+  const handleFillDemoAdmin = () => {
+    setError('');
+    setTab('login');
+    setEmail('admin@womensafe.ai');
+    setPassword('password123');
+  };
+
   return (
     <div id="auth-modal" className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4">
       <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden animate-in fade-in zoom-in-95 duration-200 transition-colors">
@@ -190,25 +197,38 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </button>
           </form>
 
-          {/* Quick Fill Testing Credentials for Standard User */}
-          <div className="pt-3 border-t border-slate-100 dark:border-slate-800">
-            <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 mb-2">
+          {/* Quick Fill Testing Credentials for Standard User & Admin */}
+          <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2">
+            <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
               <span className="font-semibold flex items-center gap-1">
                 <Sparkles className="w-3 h-3 text-rose-500" />
-                <span>Quick Test User:</span>
+                <span>Quick Demo Accounts:</span>
               </span>
             </div>
-            <button
-              type="button"
-              onClick={handleFillDemoUser}
-              className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800/80 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-left text-[11px] transition-colors flex items-center justify-between"
-            >
-              <div>
-                <span className="font-bold text-slate-800 dark:text-slate-200 block">Standard User</span>
-                <span className="text-slate-500 dark:text-slate-400 text-[10px]">user@womensafe.ai</span>
-              </div>
-              <span className="text-[10px] font-semibold text-rose-600 dark:text-rose-400">Autofill</span>
-            </button>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={handleFillDemoUser}
+                className="p-2.5 bg-slate-50 dark:bg-slate-800/80 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-left transition-colors flex flex-col justify-between"
+              >
+                <div className="flex items-center justify-between w-full mb-0.5">
+                  <span className="font-bold text-slate-800 dark:text-slate-200 text-xs">Standard User</span>
+                  <span className="text-[9px] font-bold text-rose-600 dark:text-rose-400 uppercase tracking-wider">Fill</span>
+                </div>
+                <span className="text-slate-500 dark:text-slate-400 text-[10px] truncate">user@womensafe.ai</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleFillDemoAdmin}
+                className="p-2.5 bg-slate-50 dark:bg-slate-800/80 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-left transition-colors flex flex-col justify-between"
+              >
+                <div className="flex items-center justify-between w-full mb-0.5">
+                  <span className="font-bold text-slate-800 dark:text-slate-200 text-xs">Admin User</span>
+                  <span className="text-[9px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider">Fill</span>
+                </div>
+                <span className="text-slate-500 dark:text-slate-400 text-[10px] truncate">admin@womensafe.ai</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>

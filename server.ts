@@ -255,14 +255,6 @@ app.post('/api/auth/login', (req, res) => {
       }
     }
 
-    // Server-side check: If the account is admin, require PIN before granting admin dashboard access
-    if (isUserAdmin && !isAdminVerified) {
-      return res.status(403).json({
-        error: 'Admin verification required to access the Admin dashboard.',
-        requiresAdminPin: true,
-      });
-    }
-
     const role = isUserAdmin ? 'admin' : 'user';
     const token = jwt.sign(
       { userId: user.id, role, adminVerified: isAdminVerified },
