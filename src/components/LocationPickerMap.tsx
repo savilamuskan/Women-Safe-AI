@@ -5,7 +5,6 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
-import { CachedTileLayer } from '../utils/CachedTileLayer';
 import { apiFetch } from '../utils/api.ts';
 import {
   MapPin,
@@ -150,7 +149,10 @@ export const LocationPickerMap: React.FC<LocationPickerMapProps> = ({
       scrollWheelZoom: true,
     });
 
-    new CachedTileLayer().addTo(map);
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap contributors',
+    }).addTo(map);
 
     if (coords) {
       const marker = L.marker([coords.lat, coords.lng], {

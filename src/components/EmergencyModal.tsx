@@ -27,7 +27,6 @@ import {
   Navigation,
   Plus,
 } from 'lucide-react';
-import { EmergencyOfflineMap } from './EmergencyOfflineMap';
 import { apiFetch } from '../utils/api.ts';
 
 interface EmergencyModalProps {
@@ -374,7 +373,6 @@ export const EmergencyModal: React.FC<EmergencyModalProps> = ({
   // Manual Location override
   const [isEditingLocation, setIsEditingLocation] = useState(false);
   const [manualLocationInput, setManualLocationInput] = useState('');
-  const [showEmergencyMap, setShowEmergencyMap] = useState<boolean>(true);
 
   // Editable SOS Distress Message State
   const [sosMessage, setSosMessage] = useState<string>('');
@@ -842,19 +840,6 @@ export const EmergencyModal: React.FC<EmergencyModalProps> = ({
               <div className="flex items-center gap-1.5 shrink-0">
                 <button
                   type="button"
-                  onClick={() => setShowEmergencyMap(!showEmergencyMap)}
-                  className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-lg border transition-colors ${
-                    showEmergencyMap
-                      ? 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800 shadow-xs'
-                      : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
-                  }`}
-                  title="Toggle offline-cached emergency map with live spatial context"
-                >
-                  <Compass className="w-3 h-3 text-rose-500" />
-                  <span>{showEmergencyMap ? 'Hide Map' : 'Offline Map'}</span>
-                </button>
-                <button
-                  type="button"
                   onClick={() => setIsEditingLocation(!isEditingLocation)}
                   className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 px-2.5 py-1 rounded-lg transition-colors"
                 >
@@ -949,15 +934,6 @@ export const EmergencyModal: React.FC<EmergencyModalProps> = ({
               </div>
             </div>
           </div>
-
-          {/* Interactive Emergency Map with Offline Tile Caching Resiliency */}
-          {showEmergencyMap && (
-            <EmergencyOfflineMap
-              coordinates={currentCoords}
-              locationName={detectedLocationName}
-              regionCode={activeRegionCode}
-            />
-          )}
 
           {/* Audio Siren Beacon Button */}
           <div className="p-3.5 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 rounded-xl flex items-center justify-between gap-3">
