@@ -6,6 +6,7 @@
 import React, { useState } from 'react';
 import { ShieldAlert, KeyRound, CheckCircle2, AlertCircle, X, Lock, ArrowRight } from 'lucide-react';
 import { User } from '../types.ts';
+import { apiFetch } from '../utils/api.ts';
 
 interface AdminPinModalProps {
   isOpen: boolean;
@@ -42,18 +43,19 @@ export const AdminPinModal: React.FC<AdminPinModalProps> = ({
     setIsLoading(true);
 
     try {
-      const res = await fetch('/api/auth/verify-admin-pin', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ pin: pin.trim() }),
-      });
+      const data = await apiFetch<{ valid: boolean; user?: User; token?: string; error?: string }>(
+        '/api/auth/verify-admin-pin',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ pin: pin.trim() }),
+        }
+      );
 
-      const data = await res.json();
-
-      if (!res.ok || !data.valid) {
+      if (!data.valid) {
         throw new Error(data.error || 'Invalid admin credentials.');
       }
 

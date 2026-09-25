@@ -21,6 +21,7 @@ import {
   ShieldAlert,
 } from 'lucide-react';
 import { AssessmentRecord, User } from '../types.ts';
+import { apiFetch } from '../utils/api.ts';
 
 interface UserDashboardProps {
   user: User;
@@ -50,13 +51,11 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
     setLoading(true);
     setError('');
     try {
-      const res = await fetch('/api/risk/history', {
+      const data = await apiFetch<{ records: AssessmentRecord[] }>('/api/risk/history', {
         headers: {
           Authorization: `Bearer ${token}`,
         },
       });
-      if (!res.ok) throw new Error('Failed to load assessment history');
-      const data = await res.json();
       setRecords(data.records || []);
     } catch (err: any) {
       setError(err.message || 'Could not connect to database service.');
@@ -75,16 +74,15 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
 
     setDeletingId(recordId);
     try {
-      const res = await fetch(`/api/risk/${recordId}`, {
+      await apiFetch(`/api/risk/${recordId}`, {
         method: 'DELETE',
         headers: {
           Authorization: `Bearer ${token}`,
         },
       });
-      if (!res.ok) throw new Error('Failed to delete record');
       setRecords(records.filter((r) => r.id !== recordId));
     } catch (err: any) {
-      alert(err.message || 'Could not delete assessment');
+      setError(err.message || 'Could not delete assessment');
     } finally {
       setDeletingId(null);
     }

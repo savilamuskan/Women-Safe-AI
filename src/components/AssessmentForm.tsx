@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { LocationPickerMap } from './LocationPickerMap.tsx';
 import { AssessmentInput, RiskResult } from '../types.ts';
+import { apiFetch } from '../utils/api.ts';
 
 interface AssessmentFormProps {
   token: string | null;
@@ -137,20 +138,13 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({ token, onResultG
         headers['Authorization'] = `Bearer ${token}`;
       }
 
-      const res = await fetch('/api/risk/predict', {
+      const data = await apiFetch<{ result: RiskResult; assessmentId?: string }>('/api/risk/predict', {
         method: 'POST',
         headers,
         body: JSON.stringify(payload),
       });
 
       clearInterval(stepInterval);
-
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.error || 'Failed to compute risk assessment');
-      }
-
-      const data = await res.json();
       onResultGenerated(data.result, data.assessmentId);
     } catch (err: any) {
       clearInterval(stepInterval);

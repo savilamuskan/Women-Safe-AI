@@ -6,6 +6,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import { CachedTileLayer } from '../utils/CachedTileLayer';
+import { apiFetch } from '../utils/api.ts';
 import {
   MapPin,
   Navigation,
@@ -226,25 +227,22 @@ export const LocationPickerMap: React.FC<LocationPickerMapProps> = ({
   // Real Reverse Geocoding via backend proxy (Nominatim)
   const reverseGeocode = async (lat: number, lng: number): Promise<void> => {
     try {
-      const res = await fetch(`/api/location/reverse?lat=${lat}&lng=${lng}`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data.success && data.location) {
-          const loc = data.location;
-          const details = {
-            country: loc.country || '',
-            city: loc.city || '',
-            state: loc.state || '',
-            area: loc.area || '',
-          };
-          setStructuredInfo(details);
-          const finalName = loc.formattedAddress || loc.displayName || `Lat ${lat.toFixed(4)}, Lng ${lng.toFixed(4)}`;
-          setCustomLabelInput(finalName);
-          onChange(finalName, lat, lng, details);
-          setDetectionStatus('success');
-          setStatusMessage('Location identified successfully.');
-          return;
-        }
+      const data = await apiFetch<{ success?: boolean; location?: any }>(`/api/location/reverse?lat=${lat}&lng=${lng}`);
+      if (data?.success && data.location) {
+        const loc = data.location;
+        const details = {
+          country: loc.country || '',
+          city: loc.city || '',
+          state: loc.state || '',
+          area: loc.area || '',
+        };
+        setStructuredInfo(details);
+        const finalName = loc.formattedAddress || loc.displayName || `Lat ${lat.toFixed(4)}, Lng ${lng.toFixed(4)}`;
+        setCustomLabelInput(finalName);
+        onChange(finalName, lat, lng, details);
+        setDetectionStatus('success');
+        setStatusMessage('Location identified successfully.');
+        return;
       }
       // If geocoding failed, fallback to coordinate label without faking country
       const fallbackName = `Coordinates: ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
@@ -330,14 +328,13 @@ export const LocationPickerMap: React.FC<LocationPickerMapProps> = ({
     setIsSearching(true);
     searchDebounceRef.current = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/location/search?q=${encodeURIComponent(val.trim())}`);
-        if (res.ok) {
-          const data = await res.json();
-          if (data.success) {
-            setSearchResults(data.results || []);
-            if ((data.results || []).length === 0) {
-              setSearchError('No matching places found. Try entering a nearby road, neighborhood, or city.');
-            }
+        const data = await apiFetch<{ success?: boolean; results?: any[] }>(
+          `/api/location/search?q=${encodeURIComponent(val.trim())}`
+        );
+        if (data?.success) {
+          setSearchResults(data.results || []);
+          if ((data.results || []).length === 0) {
+            setSearchError('No matching places found. Try entering a nearby road, neighborhood, or city.');
           }
         } else {
           setSearchError('Search service error. Please try again.');

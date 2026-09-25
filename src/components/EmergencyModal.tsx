@@ -28,6 +28,7 @@ import {
   Plus,
 } from 'lucide-react';
 import { EmergencyOfflineMap } from './EmergencyOfflineMap';
+import { apiFetch } from '../utils/api.ts';
 
 interface EmergencyModalProps {
   onClose: () => void;
@@ -447,35 +448,25 @@ export const EmergencyModal: React.FC<EmergencyModalProps> = ({
         setLocationSource('gps');
 
         try {
-          const res = await fetch(`/api/location/reverse?lat=${lat}&lng=${lng}`);
+          const data = await apiFetch<{ location?: any }>(`/api/location/reverse?lat=${lat}&lng=${lng}`);
+          const loc = data?.location || {};
+          const countryCode = (loc.countryCode || '').toLowerCase();
+          const formatted = loc.formattedAddress || loc.displayName || `Lat ${lat.toFixed(4)}, Lng ${lng.toFixed(4)}`;
+          setDetectedLocationName(formatted);
 
-          if (res.ok) {
-            const data = await res.json();
-            const loc = data.location || {};
-            const countryCode = (loc.countryCode || '').toLowerCase();
-            const formatted = loc.formattedAddress || loc.displayName || `Lat ${lat.toFixed(4)}, Lng ${lng.toFixed(4)}`;
-            setDetectedLocationName(formatted);
+          // Match region config if supported
+          let targetRegion = activeRegionCode;
+          if (countryCode && REGION_CONFIGS[countryCode]) {
+            targetRegion = countryCode;
+            setActiveRegionCode(countryCode);
+          } else if (countryCode === 'uk') {
+            targetRegion = 'gb';
+            setActiveRegionCode('gb');
+          }
 
-            // Match region config if supported
-            let targetRegion = activeRegionCode;
-            if (countryCode && REGION_CONFIGS[countryCode]) {
-              targetRegion = countryCode;
-              setActiveRegionCode(countryCode);
-            } else if (countryCode === 'uk') {
-              targetRegion = 'gb';
-              setActiveRegionCode('gb');
-            }
-
-            // Auto-update message if user hasn't typed custom message
-            if (!isUserEditedRef.current) {
-              setSosMessage(buildDefaultSOSMessage(formatted, coordsString, coordsObj, targetRegion));
-            }
-          } else {
-            const gpsLabel = `Current GPS Fix (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
-            setDetectedLocationName(gpsLabel);
-            if (!isUserEditedRef.current) {
-              setSosMessage(buildDefaultSOSMessage(gpsLabel, coordsString, coordsObj, activeRegionCode));
-            }
+          // Auto-update message if user hasn't typed custom message
+          if (!isUserEditedRef.current) {
+            setSosMessage(buildDefaultSOSMessage(formatted, coordsString, coordsObj, targetRegion));
           }
         } catch {
           const gpsLabel = `GPS Position (${lat.toFixed(4)}, ${lng.toFixed(4)})`;

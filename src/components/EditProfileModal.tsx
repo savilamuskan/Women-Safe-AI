@@ -6,6 +6,7 @@
 import React, { useState } from 'react';
 import { X, User as UserIcon, Mail, Lock, Shield, Check, AlertCircle, Save } from 'lucide-react';
 import { User } from '../types.ts';
+import { apiFetch } from '../utils/api.ts';
 
 interface EditProfileModalProps {
   user: User;
@@ -71,7 +72,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
     setIsSaving(true);
     try {
       const url = isSelf ? '/api/auth/profile' : `/api/admin/users/${activeUser.id}`;
-      const res = await fetch(url, {
+      const data = await apiFetch<{ user: User; token?: string; error?: string }>(url, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -84,11 +85,6 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
           password: password ? password : undefined,
         }),
       });
-
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Failed to update profile');
-      }
 
       setSuccess('Account profile updated successfully!');
       onUserUpdated(data.user, data.token);

@@ -6,6 +6,7 @@
 import React, { useState } from 'react';
 import { Shield, Lock, Mail, User as UserIcon, X, AlertCircle, Sparkles } from 'lucide-react';
 import { User } from '../types.ts';
+import { apiFetch } from '../utils/api.ts';
 
 interface AuthModalProps {
   initialTab?: 'login' | 'register';
@@ -36,16 +37,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       : { name: name.trim(), email: email.trim().toLowerCase(), password };
 
     try {
-      const res = await fetch(endpoint, {
+      const data = await apiFetch<{ user: User; token: string; message?: string }>(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Authentication failed');
-      }
 
       onAuthSuccess(data.user, data.token);
     } catch (err: any) {

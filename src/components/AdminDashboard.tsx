@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { SystemStats, AssessmentRecord, User } from '../types.ts';
 import { EditProfileModal } from './EditProfileModal.tsx';
+import { apiFetch } from '../utils/api.ts';
 
 interface AdminDashboardProps {
   user: User;
@@ -60,35 +61,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setLoading(true);
     setPinError('');
     try {
-      const [statsRes, assessRes, usersRes] = await Promise.all([
-        fetch('/api/admin/stats', { headers: { Authorization: `Bearer ${token}` } }),
-        fetch('/api/admin/assessments', { headers: { Authorization: `Bearer ${token}` } }),
-        fetch('/api/admin/users', { headers: { Authorization: `Bearer ${token}` } }),
+      const [s, a, u] = await Promise.all([
+        apiFetch<SystemStats>('/api/admin/stats', { headers: { Authorization: `Bearer ${token}` } }),
+        apiFetch<{ assessments: AssessmentRecord[] }>('/api/admin/assessments', { headers: { Authorization: `Bearer ${token}` } }),
+        apiFetch<{ users: User[] }>('/api/admin/users', { headers: { Authorization: `Bearer ${token}` } }),
       ]);
 
-      if (statsRes.status === 403 || assessRes.status === 403 || usersRes.status === 403) {
-        const statsData = await statsRes.json().catch(() => ({}));
-        if (statsData.requiresAdminPin) {
-          setNeedsPinUnlock(true);
-          setLoading(false);
-          return;
-        }
-      }
-
-      if (statsRes.ok) {
-        const s = await statsRes.json();
+      if (s) {
         setStats(s);
         setNeedsPinUnlock(false);
       }
-      if (assessRes.ok) {
-        const a = await assessRes.json();
-        setAllAssessments(a.assessments || []);
+      if (a?.assessments) {
+        setAllAssessments(a.assessments);
       }
-      if (usersRes.ok) {
-        const u = await usersRes.json();
-        setUsersList(u.users || []);
+      if (u?.users) {
+        setUsersList(u.users);
       }
-    } catch (err) {
+    } catch (err: any) {
+      if (err.message && (err.message.includes('PIN') || err.message.includes('credentials') || err.message.includes('verification'))) {
+        setNeedsPinUnlock(true);
+      }
       console.error('Admin data fetch error', err);
     } finally {
       setLoading(false);
@@ -109,17 +101,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
     setIsVerifyingPin(true);
     try {
-      const res = await fetch('/api/auth/verify-admin-pin', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ pin: pinInput.trim() }),
-      });
+      const data = await apiFetch<{ valid: boolean; user?: User; token?: string; error?: string }>(
+        '/api/auth/verify-admin-pin',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ pin: pinInput.trim() }),
+        }
+      );
 
-      const data = await res.json();
-      if (!res.ok || !data.valid) {
+      if (!data.valid) {
         throw new Error(data.error || 'PIN verification rejected by server');
       }
 
@@ -159,14 +153,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     if (!confirmed) return;
 
     try {
-      const res = await fetch(`/api/admin/users/${targetUser.id}`, {
+      await apiFetch(`/api/admin/users/${targetUser.id}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || 'Failed to delete user');
-      }
       setUsersList((prev) => prev.filter((u) => u.id !== targetUser.id));
     } catch (err: any) {
       alert(err.message || 'Failed to delete user account');
@@ -177,16 +167,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setIsRetraining(true);
     setRetrainMessage('');
     try {
-      const res = await fetch('/api/admin/retrain', {
+      const data = await apiFetch<{ metrics?: any }>('/api/admin/retrain', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
       });
-      const data = await res.json();
-      if (res.ok) {
-        setRetrainMessage('Model retrained and re-calibrated successfully!');
-        if (stats && data.metrics) {
-          setStats({ ...stats, modelMetrics: data.metrics });
-        }
+      setRetrainMessage('Model retrained and re-calibrated successfully!');
+      if (stats && data?.metrics) {
+        setStats({ ...stats, modelMetrics: data.metrics });
       }
     } catch {
       setRetrainMessage('Failed to trigger retraining pipeline.');

@@ -21,6 +21,7 @@ import { Footer } from './components/Footer.tsx';
 import { AdminPinModal } from './components/AdminPinModal.tsx';
 import { User, RiskResult, AssessmentRecord } from './types.ts';
 import { ThemeProvider } from './context/ThemeContext.tsx';
+import { apiFetch } from './utils/api.ts';
 
 export default function App() {
   const [currentView, setCurrentView] = useState<string>('landing');
@@ -51,29 +52,25 @@ export default function App() {
 
     if (savedToken && savedUser) {
       // Validate with server that this user account still exists in the database
-      fetch('/api/auth/me', {
+      apiFetch<{ user: User }>('/api/auth/me', {
         headers: { Authorization: `Bearer ${savedToken}` },
       })
-        .then(async (res) => {
-          if (!res.ok) {
-            // Account was cleared/purged from database or token expired
+        .then((data) => {
+          if (data?.user) {
+            try {
+              const payload = JSON.parse(atob(savedToken.split('.')[1]));
+              if (payload.adminVerified) {
+                data.user.adminVerified = true;
+              }
+            } catch {}
+            setUser(data.user);
+            setToken(savedToken);
+            localStorage.setItem('womensafe_user', JSON.stringify(data.user));
+          } else {
             localStorage.removeItem('womensafe_jwt');
             localStorage.removeItem('womensafe_user');
             setUser(null);
             setToken(null);
-          } else {
-            const data = await res.json();
-            if (data?.user) {
-              try {
-                const payload = JSON.parse(atob(savedToken.split('.')[1]));
-                if (payload.adminVerified) {
-                  data.user.adminVerified = true;
-                }
-              } catch {}
-              setUser(data.user);
-              setToken(savedToken);
-              localStorage.setItem('womensafe_user', JSON.stringify(data.user));
-            }
           }
         })
         .catch(() => {
@@ -128,7 +125,7 @@ export default function App() {
 
   const handleLogout = async () => {
     try {
-      await fetch('/api/auth/logout', { method: 'POST' });
+      await apiFetch('/api/auth/logout', { method: 'POST' });
     } catch {}
     setUser(null);
     setToken(null);

@@ -32,6 +32,17 @@ dotenv.config();
 
 const app = express();
 
+// Enable CORS for remote frontends (e.g. Cloudflare Pages, Vercel, or custom domains)
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, x-admin-pin');
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  next();
+});
+
 // Detect environment:
 // In the AI Studio preview container, CONTROL_PLANE_PORT is set to 8000, NGINX_PORT is 8080, and NODE_ENV is 'development'.
 // In production Cloud Run, CONTROL_PLANE_PORT is unset, NGINX is not running, and Cloud Run assigns PORT (8080).
@@ -750,9 +761,16 @@ async function startServer() {
     }
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`WomenSafe AI Server running on port ${PORT} [env: ${isProduction ? 'production' : 'development'}]`);
-  });
+  if (!process.env.VERCEL) {
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`WomenSafe AI Server running on port ${PORT} [env: ${isProduction ? 'production' : 'development'}]`);
+    });
+  }
 }
 
-startServer();
+if (!process.env.VERCEL) {
+  startServer();
+}
+
+export default app;
+export { app };
