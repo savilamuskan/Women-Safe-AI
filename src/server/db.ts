@@ -38,7 +38,7 @@ function ensureDataDir(): void {
 function getInitialDatabase(): DatabaseSchema {
   const salt = bcrypt.genSaltSync(10);
   const userHash = bcrypt.hashSync('password123', salt);
-  const adminHash = bcrypt.hashSync('admin123', salt);
+  const adminHash = bcrypt.hashSync('password123', salt);
 
   const now = new Date();
 
@@ -221,25 +221,56 @@ function getInitialDatabase(): DatabaseSchema {
   };
 }
 
+let memoryDbCache: DatabaseSchema | null = null;
+const TMP_FILE = '/tmp/womensafe_db.json';
+
 export function readDb(): DatabaseSchema {
-  ensureDataDir();
-  if (!fs.existsSync(DB_FILE)) {
-    const initial = getInitialDatabase();
-    writeDb(initial);
-    return initial;
+  if (memoryDbCache) {
+    return memoryDbCache;
   }
+
+  // Check /tmp first (in case running on serverless Vercel)
   try {
-    const raw = fs.readFileSync(DB_FILE, 'utf-8');
-    return JSON.parse(raw);
-  } catch (err) {
-    console.error('Failed to read db.json, returning initial seed:', err);
-    return getInitialDatabase();
+    if (fs.existsSync(TMP_FILE)) {
+      const raw = fs.readFileSync(TMP_FILE, 'utf-8');
+      const parsed = JSON.parse(raw);
+      memoryDbCache = parsed;
+      return parsed;
+    }
+  } catch {}
+
+  ensureDataDir();
+  if (fs.existsSync(DB_FILE)) {
+    try {
+      const raw = fs.readFileSync(DB_FILE, 'utf-8');
+      const parsed = JSON.parse(raw);
+      memoryDbCache = parsed;
+      return parsed;
+    } catch (err) {
+      console.error('Failed to read db.json:', err);
+    }
   }
+
+  const initial = getInitialDatabase();
+  memoryDbCache = initial;
+  writeDb(initial);
+  return initial;
 }
 
 export function writeDb(data: DatabaseSchema): void {
-  ensureDataDir();
-  fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2), 'utf-8');
+  memoryDbCache = data;
+
+  // Try writing to primary DB_FILE
+  try {
+    ensureDataDir();
+    fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2), 'utf-8');
+    return;
+  } catch (err) {
+    // Read-only filesystem (e.g. Vercel Lambda)
+    try {
+      fs.writeFileSync(TMP_FILE, JSON.stringify(data, null, 2), 'utf-8');
+    } catch {}
+  }
 }
 
 // User Operations

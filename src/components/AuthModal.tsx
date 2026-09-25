@@ -31,6 +31,19 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     setError('');
     setIsLoading(true);
 
+    if (tab === 'register') {
+      if (!name.trim()) {
+        setError('Please enter your full name.');
+        setIsLoading(false);
+        return;
+      }
+      if (password.length < 6) {
+        setError('Password must be at least 6 characters long.');
+        setIsLoading(false);
+        return;
+      }
+    }
+
     const endpoint = tab === 'login' ? '/api/auth/login' : '/api/auth/register';
     const payload = tab === 'login'
       ? { email: email.trim().toLowerCase(), password }
@@ -126,9 +139,23 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         {/* Form Body */}
         <div className="p-6 space-y-4">
           {error && (
-            <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 text-rose-700 dark:text-rose-300 rounded-xl text-xs flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 shrink-0 text-rose-600 dark:text-rose-400" />
-              <span>{error}</span>
+            <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 text-rose-700 dark:text-rose-300 rounded-xl text-xs flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 text-rose-600 dark:text-rose-400" />
+                <span>{error}</span>
+              </div>
+              {error.toLowerCase().includes('already exists') && tab === 'register' && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTab('login');
+                    setError('');
+                  }}
+                  className="text-xs font-bold text-rose-700 dark:text-rose-400 hover:underline shrink-0"
+                >
+                  Sign In &rarr;
+                </button>
+              )}
             </div>
           )}
 
@@ -175,6 +202,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="At least 6 characters"
                   required
+                  minLength={6}
                   className="w-full pl-9 pr-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-rose-500 focus:bg-white dark:focus:bg-slate-900"
                 />
               </div>
