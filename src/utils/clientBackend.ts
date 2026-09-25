@@ -6,8 +6,10 @@
 import { evaluateRisk } from '../server/ml-engine.ts';
 import type { AssessmentInput, AssessmentRecord, RiskResult, User } from '../types.ts';
 
-interface StoredClientUser extends User {
+export interface StoredClientUser extends User {
   password: string;
+  verificationCode?: string;
+  verificationCodeExpires?: string;
 }
 
 const STORAGE_USERS_KEY = 'womensafe_client_users_v2';
@@ -21,6 +23,7 @@ const INITIAL_USERS: StoredClientUser[] = [
     email: 'user@womensafe.ai',
     role: 'user',
     password: 'password123',
+    emailVerified: true,
     created_at: '2026-09-08T16:38:18.461Z',
   },
   {
@@ -29,6 +32,7 @@ const INITIAL_USERS: StoredClientUser[] = [
     email: 'admin@womensafe.ai',
     role: 'admin',
     password: 'password123',
+    emailVerified: true,
     created_at: '2026-08-23T16:38:18.461Z',
   },
 ];
@@ -139,6 +143,32 @@ function saveStoredAssessments(records: AssessmentRecord[]): void {
   }
 }
 
+export function syncUserToClientStorage(user: User, password?: string): void {
+  if (typeof window === 'undefined' || !user || !user.email) return;
+  try {
+    const users = getStoredUsers();
+    const cleanEmail = String(user.email).trim().toLowerCase();
+    const existingIdx = users.findIndex((u) => u.email.trim().toLowerCase() === cleanEmail);
+    if (existingIdx !== -1) {
+      if (password) {
+        users[existingIdx].password = String(password).trim();
+      }
+      users[existingIdx].name = user.name;
+      users[existingIdx].role = user.role;
+    } else {
+      users.push({
+        id: user.id || `usr_${Date.now()}`,
+        name: user.name || 'User',
+        email: cleanEmail,
+        role: user.role || 'user',
+        password: String(password || 'password123').trim(),
+        created_at: user.created_at || new Date().toISOString(),
+      });
+    }
+    saveStoredUsers(users);
+  } catch {}
+}
+
 function generateClientToken(userId: string, role: 'user' | 'admin', adminVerified: boolean): string {
   const header = { alg: 'HS256', typ: 'JWT' };
   const payload = {
@@ -199,12 +229,29 @@ export async function handleClientBackendRequest(endpoint: string, options?: Req
       throw new Error('Email and password are required');
     }
 
-    const users = getStoredUsers();
-    const cleanEmail = email.trim().toLowerCase();
-    const user = users.find((u) => u.email.toLowerCase() === cleanEmail);
+    const cleanEmail = String(email).trim().toLowerCase();
+    const cleanPassword = String(password).trim();
 
-    if (!user || user.password !== password) {
+    const users = getStoredUsers();
+    const user = users.find((u) => u.email.trim().toLowerCase() === cleanEmail);
+
+    if (!user || user.password.trim() !== cleanPassword) {
       throw new Error('Invalid email or password');
+    }
+
+    if (user.emailVerified === false) {
+      let code = user.verificationCode;
+      if (!code) {
+        code = Math.floor(100000 + Math.random() * 900000).toString();
+        user.verificationCode = code;
+        user.verificationCodeExpires = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+        saveStoredUsers(users);
+      }
+      const err: any = new Error('Please verify your email address before logging in.');
+      err.requiresVerification = true;
+      err.email = cleanEmail;
+      err.devVerificationCode = code;
+      throw err;
     }
 
     let isUserAdmin = user.role === 'admin';
@@ -220,11 +267,11 @@ export async function handleClientBackendRequest(endpoint: string, options?: Req
     }
 
     const jwtToken = generateClientToken(user.id, user.role, isAdminVerified);
-    const { password: _, ...publicUser } = user;
+    const { password: _, verificationCode: _vc, verificationCodeExpires: _vce, ...publicUser } = user;
 
     return {
       message: 'Login successful',
-      user: { ...publicUser, adminVerified: isAdminVerified },
+      user: { ...publicUser, adminVerified: isAdminVerified, emailVerified: true },
       token: jwtToken,
     };
   }
@@ -235,13 +282,17 @@ export async function handleClientBackendRequest(endpoint: string, options?: Req
     if (!name || !email || !password) {
       throw new Error('Name, email, and password are required');
     }
-    if (password.length < 6) {
+
+    const cleanEmail = String(email).trim().toLowerCase();
+    const cleanPassword = String(password).trim();
+    const cleanName = String(name).trim();
+
+    if (cleanPassword.length < 6) {
       throw new Error('Password must be at least 6 characters long');
     }
 
     const users = getStoredUsers();
-    const cleanEmail = email.trim().toLowerCase();
-    const existing = users.find((u) => u.email.toLowerCase() === cleanEmail);
+    const existing = users.find((u) => u.email.trim().toLowerCase() === cleanEmail);
     if (existing) {
       throw new Error('An account with this email address already exists');
     }
@@ -256,25 +307,109 @@ export async function handleClientBackendRequest(endpoint: string, options?: Req
       isAdminVerified = true;
     }
 
+    const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+
     const newUser: StoredClientUser = {
       id: `usr_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-      name: name.trim(),
+      name: cleanName,
       email: cleanEmail,
       role: requestedRole,
-      password: password.trim(),
+      password: cleanPassword,
+      emailVerified: false,
+      verificationCode,
+      verificationCodeExpires: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
       created_at: new Date().toISOString(),
     };
 
     users.push(newUser);
     saveStoredUsers(users);
 
-    const jwtToken = generateClientToken(newUser.id, newUser.role, isAdminVerified);
-    const { password: _, ...publicUser } = newUser;
+    const { password: _, verificationCode: _vc, verificationCodeExpires: _vce, ...publicUser } = newUser;
 
     return {
-      message: 'Registration successful',
-      user: { ...publicUser, adminVerified: isAdminVerified },
+      message: 'Account created! Please enter the 6-digit verification code sent to your email.',
+      requiresVerification: true,
+      email: cleanEmail,
+      user: { ...publicUser, adminVerified: isAdminVerified, emailVerified: false },
+      devVerificationCode: verificationCode,
+    };
+  }
+
+  // 2b. POST /api/auth/verify-email
+  if (path === '/api/auth/verify-email' && method === 'POST') {
+    const { email, code } = body;
+    if (!email || !code) {
+      throw new Error('Email and verification code are required');
+    }
+
+    const cleanEmail = String(email).trim().toLowerCase();
+    const cleanCode = String(code).trim();
+
+    const users = getStoredUsers();
+    const user = users.find((u) => u.email.trim().toLowerCase() === cleanEmail);
+    if (!user) {
+      throw new Error('User not found with this email address');
+    }
+
+    if (user.emailVerified) {
+      const jwtToken = generateClientToken(user.id, user.role, false);
+      const { password: _, verificationCode: _vc, verificationCodeExpires: _vce, ...publicUser } = user;
+      return {
+        message: 'Email already verified',
+        user: { ...publicUser, emailVerified: true },
+        token: jwtToken,
+      };
+    }
+
+    if (!user.verificationCode || user.verificationCode !== cleanCode) {
+      throw new Error('Invalid verification code. Please check and try again.');
+    }
+
+    if (user.verificationCodeExpires && new Date(user.verificationCodeExpires).getTime() < Date.now()) {
+      throw new Error('Verification code has expired. Please request a new one.');
+    }
+
+    user.emailVerified = true;
+    delete user.verificationCode;
+    delete user.verificationCodeExpires;
+    saveStoredUsers(users);
+
+    const jwtToken = generateClientToken(user.id, user.role, false);
+    const { password: _, verificationCode: _vc, verificationCodeExpires: _vce, ...publicUser } = user;
+
+    return {
+      message: 'Email successfully verified! Welcome to WomenSafe AI.',
+      user: { ...publicUser, emailVerified: true },
       token: jwtToken,
+    };
+  }
+
+  // 2c. POST /api/auth/resend-verification
+  if (path === '/api/auth/resend-verification' && method === 'POST') {
+    const { email } = body;
+    if (!email) {
+      throw new Error('Email is required');
+    }
+
+    const cleanEmail = String(email).trim().toLowerCase();
+    const users = getStoredUsers();
+    const user = users.find((u) => u.email.trim().toLowerCase() === cleanEmail);
+    if (!user) {
+      throw new Error('No account found with this email address');
+    }
+
+    if (user.emailVerified) {
+      throw new Error('This email is already verified. Please sign in.');
+    }
+
+    const newCode = Math.floor(100000 + Math.random() * 900000).toString();
+    user.verificationCode = newCode;
+    user.verificationCodeExpires = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+    saveStoredUsers(users);
+
+    return {
+      message: 'A fresh 6-digit verification code has been dispatched.',
+      devVerificationCode: newCode,
     };
   }
 

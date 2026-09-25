@@ -8,8 +8,10 @@ import path from 'path';
 import bcrypt from 'bcryptjs';
 import type { RiskAssessmentRecord, SystemStats, User } from '../types.ts';
 
-interface StoredUser extends User {
+export interface StoredUser extends User {
   password_hash: string;
+  verificationCode?: string;
+  verificationCodeExpires?: string;
 }
 
 interface DatabaseSchema {
@@ -50,6 +52,7 @@ function getInitialDatabase(): DatabaseSchema {
         email: 'user@womensafe.ai',
         role: 'user',
         password_hash: userHash,
+        emailVerified: true,
         created_at: new Date(now.getTime() - 86400000 * 14).toISOString(),
       },
       {
@@ -58,6 +61,7 @@ function getInitialDatabase(): DatabaseSchema {
         email: 'admin@womensafe.ai',
         role: 'admin',
         password_hash: adminHash,
+        emailVerified: true,
         created_at: new Date(now.getTime() - 86400000 * 30).toISOString(),
       },
     ],
@@ -275,30 +279,91 @@ export function writeDb(data: DatabaseSchema): void {
 
 // User Operations
 export function findUserByEmail(email: string): StoredUser | undefined {
+  if (!email) return undefined;
+  const clean = email.trim().toLowerCase();
   const db = readDb();
-  return db.users.find((u) => u.email.toLowerCase() === email.toLowerCase());
+  return db.users.find((u) => (u.email || '').trim().toLowerCase() === clean);
 }
 
 export function findUserById(id: string): StoredUser | undefined {
+  if (!id) return undefined;
   const db = readDb();
   return db.users.find((u) => u.id === id);
 }
 
-export function createUser(name: string, email: string, passwordHash: string, role: 'user' | 'admin' = 'user'): User {
+export function createUser(
+  name: string,
+  email: string,
+  passwordHash: string,
+  role: 'user' | 'admin' = 'user',
+  emailVerified: boolean = false,
+  verificationCode?: string,
+  verificationCodeExpires?: string
+): StoredUser {
   const db = readDb();
+  const cleanEmail = email.trim().toLowerCase();
   const newUser: StoredUser = {
     id: `usr_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-    name,
-    email: email.toLowerCase(),
+    name: name.trim(),
+    email: cleanEmail,
     role,
     password_hash: passwordHash,
+    emailVerified,
+    verificationCode,
+    verificationCodeExpires,
     created_at: new Date().toISOString(),
   };
   db.users.push(newUser);
   writeDb(db);
 
-  const { password_hash, ...publicUser } = newUser;
-  return publicUser;
+  return newUser;
+}
+
+export function verifyUserEmail(
+  email: string,
+  code: string
+): { success: boolean; error?: string; user?: User } {
+  const cleanEmail = email.trim().toLowerCase();
+  const cleanCode = code.trim();
+  const db = readDb();
+  const index = db.users.findIndex((u) => (u.email || '').trim().toLowerCase() === cleanEmail);
+  if (index === -1) {
+    return { success: false, error: 'User not found with this email address' };
+  }
+
+  const user = db.users[index];
+  if (user.emailVerified) {
+    const { password_hash, verificationCode, verificationCodeExpires, ...publicUser } = user;
+    return { success: true, user: publicUser };
+  }
+
+  if (!user.verificationCode || user.verificationCode !== cleanCode) {
+    return { success: false, error: 'Invalid verification code. Please check and try again.' };
+  }
+
+  if (user.verificationCodeExpires && new Date(user.verificationCodeExpires).getTime() < Date.now()) {
+    return { success: false, error: 'Verification code has expired. Please request a new one.' };
+  }
+
+  user.emailVerified = true;
+  delete user.verificationCode;
+  delete user.verificationCodeExpires;
+  writeDb(db);
+
+  const { password_hash, verificationCode, verificationCodeExpires, ...publicUser } = user;
+  return { success: true, user: publicUser };
+}
+
+export function setVerificationCode(email: string, code: string, expiresMinutes: number = 15): boolean {
+  const cleanEmail = email.trim().toLowerCase();
+  const db = readDb();
+  const index = db.users.findIndex((u) => (u.email || '').trim().toLowerCase() === cleanEmail);
+  if (index === -1) return false;
+
+  db.users[index].verificationCode = code;
+  db.users[index].verificationCodeExpires = new Date(Date.now() + expiresMinutes * 60 * 1000).toISOString();
+  writeDb(db);
+  return true;
 }
 
 export function updateUser(

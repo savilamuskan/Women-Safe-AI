@@ -10,6 +10,7 @@ export interface User {
   role: 'user' | 'admin';
   created_at: string;
   adminVerified?: boolean;
+  emailVerified?: boolean;
 }
 
 export interface AuthState {

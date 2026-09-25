@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { handleClientBackendRequest } from './clientBackend.ts';
+import { handleClientBackendRequest, syncUserToClientStorage } from './clientBackend.ts';
 
 /**
  * Returns the base URL for API requests.
@@ -53,7 +53,8 @@ export function buildApiUrl(endpoint: string): string {
  * - If the remote server or worker is down, returns 404/502/503/1042, or blocks CORS,
  *   it transparently falls back to the client database so authentication and risk predictions
  *   work without interruption.
- * - Extracts real server error messages (e.g. "Invalid email or password") cleanly.
+ * - Synchronizes registered user credentials between local browser storage and server,
+ *   preventing "Invalid email or password" after creating an account.
  */
 export async function apiFetch<T = any>(endpoint: string, options?: RequestInit): Promise<T> {
   const url = buildApiUrl(endpoint);
@@ -61,6 +62,15 @@ export async function apiFetch<T = any>(endpoint: string, options?: RequestInit)
   const headers = new Headers(options?.headers || {});
   if (!headers.has('Accept')) {
     headers.set('Accept', 'application/json, text/plain, */*');
+  }
+
+  let requestBody: any = null;
+  if (options?.body) {
+    try {
+      requestBody = typeof options.body === 'string' ? JSON.parse(options.body) : options.body;
+    } catch {
+      requestBody = null;
+    }
   }
 
   let response: Response | null = null;
@@ -83,8 +93,19 @@ export async function apiFetch<T = any>(endpoint: string, options?: RequestInit)
         `[WomenSafe AI] Network request to ${url} failed (${networkError?.message || 'Failed to fetch'}). Falling back to resilient local database.`
       );
       try {
-        return await handleClientBackendRequest(endpoint, options);
+        const fallbackResult = await handleClientBackendRequest(endpoint, options);
+        if (
+          (endpoint === '/api/auth/register' || endpoint === '/api/auth/login') &&
+          fallbackResult?.user &&
+          requestBody?.password
+        ) {
+          syncUserToClientStorage(fallbackResult.user, requestBody.password);
+        }
+        return fallbackResult;
       } catch (fallbackErr: any) {
+        if (fallbackErr?.requiresVerification) {
+          throw fallbackErr;
+        }
         throw new Error(fallbackErr.message || 'Authentication service error');
       }
     }
@@ -131,14 +152,59 @@ export async function apiFetch<T = any>(endpoint: string, options?: RequestInit)
       `[WomenSafe AI] Backend at ${url} returned status ${response.status}. Falling back to resilient local database.`
     );
     try {
-      return await handleClientBackendRequest(endpoint, options);
+      const fallbackResult = await handleClientBackendRequest(endpoint, options);
+      if (
+        (endpoint === '/api/auth/register' || endpoint === '/api/auth/login') &&
+        fallbackResult?.user &&
+        requestBody?.password
+      ) {
+        syncUserToClientStorage(fallbackResult.user, requestBody.password);
+      }
+      return fallbackResult;
     } catch (fallbackErr: any) {
+      if (fallbackErr?.requiresVerification) {
+        throw fallbackErr;
+      }
       throw new Error(fallbackErr.message || 'Authentication service error');
+    }
+  }
+
+  // Handle 401 Unauthorized for login:
+  // If the server doesn't recognize the user (e.g. user registered when hosted statically or in localStorage),
+  // check local database. If credentials match locally, authenticate and sync account with server.
+  if (response.status === 401 && endpoint === '/api/auth/login' && requestBody?.email && requestBody?.password) {
+    try {
+      const localResult = await handleClientBackendRequest(endpoint, options);
+      if (localResult && localResult.user && localResult.token) {
+        console.info('[WomenSafe AI] Successfully authenticated user from synchronized client storage.');
+        // Background sync to server so server database also records this user
+        fetch(buildApiUrl('/api/auth/register'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: localResult.user.name || 'User',
+            email: requestBody.email,
+            password: requestBody.password,
+            role: localResult.user.role || 'user',
+          }),
+        }).catch(() => {});
+        return localResult as T;
+      }
+    } catch {
+      // Both server and local database rejected the credentials, proceed to throw server error
     }
   }
 
   // Handle actual application error statuses from backend (e.g. 401 Invalid Credentials, 403 Forbidden, 409 Conflict)
   if (!response.ok) {
+    if (parsedData && typeof parsedData === 'object' && parsedData.requiresVerification) {
+      const verifyErr: any = new Error(parsedData.error || 'Please verify your email address before logging in.');
+      verifyErr.requiresVerification = true;
+      verifyErr.email = parsedData.email;
+      verifyErr.devVerificationCode = parsedData.devVerificationCode;
+      throw verifyErr;
+    }
+
     let errorMsg: string;
 
     if (parsedData && typeof parsedData === 'object') {
@@ -158,6 +224,14 @@ export async function apiFetch<T = any>(endpoint: string, options?: RequestInit)
 
   // If response is OK and was valid JSON
   if (parsedData !== null) {
+    // If login or register succeeded on server, mirror account to client local storage for resilience
+    if (
+      (endpoint === '/api/auth/register' || endpoint === '/api/auth/login') &&
+      parsedData.user &&
+      requestBody?.password
+    ) {
+      syncUserToClientStorage(parsedData.user, requestBody.password);
+    }
     return parsedData as T;
   }
 

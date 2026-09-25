@@ -24,7 +24,9 @@ import {
   getSystemStats,
   retrainModelSimulated,
   saveAssessment,
+  setVerificationCode,
   updateUser,
+  verifyUserEmail,
 } from './src/server/db.ts';
 import type { AssessmentInput, User } from './src/types.ts';
 
@@ -177,6 +179,10 @@ app.get(['/health', '/api/health'], (req, res) => {
 });
 
 // 1. Authentication Endpoints
+function generateOtp(): string {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
 app.post('/api/auth/register', (req, res) => {
   try {
     const { name, email, password, role, adminPin } = req.body;
@@ -185,7 +191,11 @@ app.post('/api/auth/register', (req, res) => {
       return res.status(400).json({ error: 'Name, email, and password are required' });
     }
 
-    if (password.length < 6) {
+    const cleanEmail = String(email).trim().toLowerCase();
+    const cleanPassword = String(password).trim();
+    const cleanName = String(name).trim();
+
+    if (cleanPassword.length < 6) {
       return res.status(400).json({ error: 'Password must be at least 6 characters long' });
     }
 
@@ -203,29 +213,101 @@ app.post('/api/auth/register', (req, res) => {
       isAdminVerified = true;
     }
 
-    const existing = findUserByEmail(email);
+    const existing = findUserByEmail(cleanEmail);
     if (existing) {
       return res.status(409).json({ error: 'An account with this email address already exists' });
     }
 
     const salt = bcrypt.genSaltSync(10);
-    const passwordHash = bcrypt.hashSync(password, salt);
-    const user = createUser(name.trim(), email.trim(), passwordHash, requestedRole);
+    const passwordHash = bcrypt.hashSync(cleanPassword, salt);
+    const verificationCode = generateOtp();
+    const verificationCodeExpires = new Date(Date.now() + 15 * 60 * 1000).toISOString();
 
-    const token = jwt.sign(
-      { userId: user.id, role: user.role, adminVerified: isAdminVerified },
-      JWT_SECRET,
-      { expiresIn: '7d' }
+    const storedUser = createUser(
+      cleanName,
+      cleanEmail,
+      passwordHash,
+      requestedRole,
+      false, // Requires email verification before login
+      verificationCode,
+      verificationCodeExpires
     );
 
+    const { password_hash, verificationCode: _c, verificationCodeExpires: _e, ...publicUser } = storedUser;
+
     res.status(201).json({
-      message: requestedRole === 'admin' ? 'Admin account created successfully' : 'Registration successful',
-      user: { ...user, adminVerified: isAdminVerified },
-      token,
+      message: 'Account created! Please enter the 6-digit verification code sent to your email.',
+      requiresVerification: true,
+      email: cleanEmail,
+      user: { ...publicUser, adminVerified: isAdminVerified },
+      devVerificationCode: verificationCode,
     });
   } catch (err: any) {
     console.error('Registration error:', err);
     res.status(500).json({ error: 'Failed to complete registration' });
+  }
+});
+
+app.post('/api/auth/verify-email', (req, res) => {
+  try {
+    const { email, code } = req.body;
+
+    if (!email || !code) {
+      return res.status(400).json({ error: 'Email and verification code are required' });
+    }
+
+    const cleanEmail = String(email).trim().toLowerCase();
+    const cleanCode = String(code).trim();
+
+    const result = verifyUserEmail(cleanEmail, cleanCode);
+    if (!result.success || !result.user) {
+      return res.status(400).json({ error: result.error || 'Verification failed. Please check the code.' });
+    }
+
+    const token = jwt.sign(
+      { userId: result.user.id, role: result.user.role, adminVerified: Boolean(result.user.adminVerified) },
+      JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    res.status(200).json({
+      message: 'Email successfully verified! Welcome to WomenSafe AI.',
+      user: { ...result.user, emailVerified: true },
+      token,
+    });
+  } catch (err: any) {
+    console.error('Email verification error:', err);
+    res.status(500).json({ error: 'Failed to verify email' });
+  }
+});
+
+app.post('/api/auth/resend-verification', (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ error: 'Email address is required' });
+    }
+
+    const cleanEmail = String(email).trim().toLowerCase();
+    const user = findUserByEmail(cleanEmail);
+    if (!user) {
+      return res.status(404).json({ error: 'No account found with this email address' });
+    }
+
+    if (user.emailVerified) {
+      return res.status(400).json({ error: 'This email is already verified. Please sign in.' });
+    }
+
+    const newCode = generateOtp();
+    setVerificationCode(cleanEmail, newCode, 15);
+
+    res.status(200).json({
+      message: 'A fresh 6-digit verification code has been dispatched.',
+      devVerificationCode: newCode,
+    });
+  } catch (err: any) {
+    console.error('Resend verification error:', err);
+    res.status(500).json({ error: 'Failed to resend verification code' });
   }
 });
 
@@ -237,14 +319,32 @@ app.post('/api/auth/login', (req, res) => {
       return res.status(400).json({ error: 'Email and password are required' });
     }
 
-    const user = findUserByEmail(email);
+    const cleanEmail = String(email).trim().toLowerCase();
+    const cleanPassword = String(password).trim();
+
+    const user = findUserByEmail(cleanEmail);
     if (!user) {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
 
-    const match = bcrypt.compareSync(password, user.password_hash);
+    const match = bcrypt.compareSync(cleanPassword, user.password_hash);
     if (!match) {
       return res.status(401).json({ error: 'Invalid email or password' });
+    }
+
+    // Check if email has been verified
+    if (user.emailVerified === false) {
+      let code = user.verificationCode;
+      if (!code || (user.verificationCodeExpires && new Date(user.verificationCodeExpires).getTime() < Date.now())) {
+        code = generateOtp();
+        setVerificationCode(cleanEmail, code, 15);
+      }
+      return res.status(403).json({
+        error: 'Please verify your email address before logging in.',
+        requiresVerification: true,
+        email: cleanEmail,
+        devVerificationCode: code,
+      });
     }
 
     // Check if user is an admin OR if admin PIN was provided
