@@ -7,9 +7,9 @@ import { handleClientBackendRequest } from './clientBackend.ts';
 
 /**
  * Returns the base URL for API requests.
- * Uses VITE_API_URL or VITE_BACKEND_URL if provided.
- * Ensures that if running in a remote production environment (e.g. Cloudflare Pages or Vercel),
- * accidental 'localhost' configuration is ignored to prevent connection failures.
+ * Uses VITE_API_URL or VITE_BACKEND_URL if provided on external deployments.
+ * If running in AI Studio preview (*.run.app) or local development, always uses
+ * the local full-stack Express server (same-origin) to avoid calling external broken workers.
  */
 export function getApiBaseUrl(): string {
   const envUrl = (
@@ -18,14 +18,18 @@ export function getApiBaseUrl(): string {
       : '') as string
   ).trim();
 
-  // If in browser and envUrl points to localhost while site is running on a remote domain
   if (typeof window !== 'undefined') {
-    const isLocalhostHost =
-      window.location.hostname === 'localhost' ||
-      window.location.hostname === '127.0.0.1';
+    const hostname = window.location.hostname;
+    const isLocalhostHost = hostname === 'localhost' || hostname === '127.0.0.1';
+    const isAIStudioPreview = hostname.endsWith('.run.app');
 
-    if (!isLocalhostHost && envUrl && (envUrl.includes('localhost') || envUrl.includes('127.0.0.1'))) {
-      // Remote deployment (e.g. Cloudflare Pages, Vercel) shouldn't attempt to call client's local machine
+    // In AI Studio preview container or localhost, Express backend runs locally on same origin
+    if (isAIStudioPreview || isLocalhostHost) {
+      return '';
+    }
+
+    // Remote deployments (e.g. Cloudflare Pages, Vercel) shouldn't attempt to call localhost
+    if (envUrl && (envUrl.includes('localhost') || envUrl.includes('127.0.0.1'))) {
       return '';
     }
   }
@@ -43,17 +47,16 @@ export function buildApiUrl(endpoint: string): string {
 }
 
 /**
- * Performs a robust fetch request that safely parses JSON or text responses,
- * preventing 'Unexpected token' and 'Unexpected end of JSON input' syntax errors.
+ * Performs a resilient fetch request that safely parses JSON/text responses.
  *
- * If deployed on a static hosting provider (e.g. Cloudflare Pages or Vercel static)
- * where the backend Express server is not running on the same domain, it gracefully
- * executes the request client-side so authentication and risk prediction continue
- * working seamlessly.
+ * Prevents 'Failed to fetch', 'Unexpected token', and 'Unexpected end of JSON input' errors:
+ * - If the remote server or worker is down, returns 404/502/503/1042, or blocks CORS,
+ *   it transparently falls back to the client database so authentication and risk predictions
+ *   work without interruption.
+ * - Extracts real server error messages (e.g. "Invalid email or password") cleanly.
  */
 export async function apiFetch<T = any>(endpoint: string, options?: RequestInit): Promise<T> {
   const url = buildApiUrl(endpoint);
-  const baseUrl = getApiBaseUrl();
 
   const headers = new Headers(options?.headers || {});
   if (!headers.has('Accept')) {
@@ -72,10 +75,13 @@ export async function apiFetch<T = any>(endpoint: string, options?: RequestInit)
     networkError = err;
   }
 
-  // Network failed or server unreachable: fallback to client backend if on static host
+  // Network failure (CORS blocked, DNS failed, worker down, or offline):
+  // Gracefully fallback to client database so the user never sees "Failed to fetch"
   if (!response || networkError) {
-    // If no remote VITE_API_URL was explicitly set, this is likely a static deploy (Cloudflare Pages/Vercel)
-    if (!baseUrl && endpoint.startsWith('/api/')) {
+    if (endpoint.startsWith('/api/')) {
+      console.warn(
+        `[WomenSafe AI] Network request to ${url} failed (${networkError?.message || 'Failed to fetch'}). Falling back to resilient local database.`
+      );
       try {
         return await handleClientBackendRequest(endpoint, options);
       } catch (fallbackErr: any) {
@@ -87,7 +93,7 @@ export async function apiFetch<T = any>(endpoint: string, options?: RequestInit)
     );
   }
 
-  // Safely read response as text first (never call response.json() directly to prevent 'Unexpected end of JSON input')
+  // Safely read response as text first (never call response.json() directly)
   let rawText = '';
   try {
     rawText = await response.text();
@@ -106,21 +112,24 @@ export async function apiFetch<T = any>(endpoint: string, options?: RequestInit)
     }
   }
 
-  // Detect static host 404/405 (e.g. Cloudflare Pages or Vercel static missing backend)
-  const isStaticHostMissingRoute =
-    (response.status === 404 || response.status === 405) &&
-    !baseUrl &&
-    endpoint.startsWith('/api/');
+  // Detect static host 404/405 or Cloudflare worker 404/502/1042 errors
+  const isNotFoundOrMethodNotAllowed =
+    response.status === 404 ||
+    response.status === 405 ||
+    response.status === 502 ||
+    response.status === 503;
 
-  const isHtmlErrorPage =
+  const isHtmlOrCloudflareError =
     trimmedText.startsWith('<!DOCTYPE') ||
     trimmedText.startsWith('<html') ||
     trimmedText.includes('The page could not be found') ||
-    trimmedText.startsWith('The page');
+    trimmedText.includes('error code: 1042') ||
+    trimmedText.startsWith('error code:');
 
-  if ((isStaticHostMissingRoute || (response.status >= 400 && isHtmlErrorPage)) && endpoint.startsWith('/api/')) {
-    // Cloudflare Pages / Vercel static returned 404 or HTML for API route:
-    // Seamlessly execute through client-side database
+  if ((isNotFoundOrMethodNotAllowed || isHtmlOrCloudflareError) && endpoint.startsWith('/api/')) {
+    console.warn(
+      `[WomenSafe AI] Backend at ${url} returned status ${response.status}. Falling back to resilient local database.`
+    );
     try {
       return await handleClientBackendRequest(endpoint, options);
     } catch (fallbackErr: any) {
@@ -128,15 +137,15 @@ export async function apiFetch<T = any>(endpoint: string, options?: RequestInit)
     }
   }
 
-  // Handle HTTP error statuses from real backend
+  // Handle actual application error statuses from backend (e.g. 401 Invalid Credentials, 403 Forbidden, 409 Conflict)
   if (!response.ok) {
     let errorMsg: string;
 
     if (parsedData && typeof parsedData === 'object') {
       errorMsg = parsedData.error || parsedData.message || `Request failed with status ${response.status}`;
     } else if (trimmedText) {
-      if (isHtmlErrorPage) {
-        errorMsg = `Backend endpoint '${endpoint}' returned ${response.status} (Not Found). Ensure the API server is deployed or VITE_API_URL is configured.`;
+      if (isHtmlOrCloudflareError) {
+        errorMsg = `Backend endpoint '${endpoint}' returned ${response.status}. Ensure the API server is active or remove invalid VITE_API_URL.`;
       } else {
         errorMsg = trimmedText.length > 200 ? `${trimmedText.slice(0, 200)}...` : trimmedText;
       }
