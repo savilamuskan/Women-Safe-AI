@@ -215,32 +215,32 @@ app.post('/api/auth/register', (req, res) => {
 
     const existing = findUserByEmail(cleanEmail);
     if (existing) {
-      return res.status(409).json({ error: 'An account with this email address already exists' });
+      return res.status(409).json({ error: 'This email is already registered. Please sign in instead.' });
     }
 
     const salt = bcrypt.genSaltSync(10);
     const passwordHash = bcrypt.hashSync(cleanPassword, salt);
-    const verificationCode = generateOtp();
-    const verificationCodeExpires = new Date(Date.now() + 15 * 60 * 1000).toISOString();
 
     const storedUser = createUser(
       cleanName,
       cleanEmail,
       passwordHash,
       requestedRole,
-      false, // Requires email verification before login
-      verificationCode,
-      verificationCodeExpires
+      true // Email verified by default, no blocking verification step
+    );
+
+    const token = jwt.sign(
+      { userId: storedUser.id, role: storedUser.role, adminVerified: isAdminVerified },
+      JWT_SECRET,
+      { expiresIn: '7d' }
     );
 
     const { password_hash, verificationCode: _c, verificationCodeExpires: _e, ...publicUser } = storedUser;
 
     res.status(201).json({
-      message: 'Account created! Please enter the 6-digit verification code sent to your email.',
-      requiresVerification: true,
-      email: cleanEmail,
-      user: { ...publicUser, adminVerified: isAdminVerified },
-      devVerificationCode: verificationCode,
+      message: requestedRole === 'admin' ? 'Admin account created successfully' : 'Registration successful! Welcome to WomenSafe AI.',
+      user: { ...publicUser, adminVerified: isAdminVerified, emailVerified: true },
+      token,
     });
   } catch (err: any) {
     console.error('Registration error:', err);
@@ -330,21 +330,6 @@ app.post('/api/auth/login', (req, res) => {
     const match = bcrypt.compareSync(cleanPassword, user.password_hash);
     if (!match) {
       return res.status(401).json({ error: 'Invalid email or password' });
-    }
-
-    // Check if email has been verified
-    if (user.emailVerified === false) {
-      let code = user.verificationCode;
-      if (!code || (user.verificationCodeExpires && new Date(user.verificationCodeExpires).getTime() < Date.now())) {
-        code = generateOtp();
-        setVerificationCode(cleanEmail, code, 15);
-      }
-      return res.status(403).json({
-        error: 'Please verify your email address before logging in.',
-        requiresVerification: true,
-        email: cleanEmail,
-        devVerificationCode: code,
-      });
     }
 
     // Check if user is an admin OR if admin PIN was provided

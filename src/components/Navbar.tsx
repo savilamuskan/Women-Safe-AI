@@ -42,17 +42,9 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   if (user) {
     navLinks.push({ id: 'dashboard', label: 'My Dashboard' });
-    if (user.role === 'admin') {
-      navLinks.push({
-        id: 'admin',
-        label: user.adminVerified ? 'Admin Portal' : 'Admin Portal (PIN)',
-        isLocked: !user.adminVerified,
-      });
-    } else {
-      navLinks.push({ id: 'admin-gate', label: 'Admin Portal', isLocked: true });
+    if (currentView === 'admin') {
+      navLinks.push({ id: 'admin', label: 'Admin Portal' });
     }
-  } else {
-    navLinks.push({ id: 'admin-gate', label: 'Admin Portal', isLocked: true });
   }
 
   const handleNavClick = (viewId: string) => {

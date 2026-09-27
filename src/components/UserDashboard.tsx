@@ -123,16 +123,6 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
-          {onOpenAdminPin && (
-            <button
-              onClick={onOpenAdminPin}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/50 rounded-xl text-xs sm:text-sm font-semibold transition-colors shadow-xs"
-              title="Access Admin Portal"
-            >
-              <ShieldAlert className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-              <span>Admin Portal</span>
-            </button>
-          )}
           {onOpenEditProfile && (
             <button
               onClick={onOpenEditProfile}

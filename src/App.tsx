@@ -83,6 +83,42 @@ export default function App() {
     }
   }, []);
 
+  // Listen for /admin, /admi, #admin, #admi in URL to grant access to Admin Panel
+  useEffect(() => {
+    const checkAdminRoute = () => {
+      if (typeof window === 'undefined') return;
+      const path = (window.location.pathname || '').toLowerCase();
+      const hash = (window.location.hash || '').toLowerCase();
+
+      const isAdminUrl =
+        path === '/admin' ||
+        path === '/admi' ||
+        path.startsWith('/admin') ||
+        path.startsWith('/admi') ||
+        hash === '#admin' ||
+        hash === '#admi' ||
+        hash === '#/admin' ||
+        hash === '#/admi';
+
+      if (isAdminUrl) {
+        if (user && user.role === 'admin' && user.adminVerified) {
+          setCurrentView('admin');
+        } else {
+          setAdminPinModalOpen(true);
+        }
+      }
+    };
+
+    checkAdminRoute();
+    window.addEventListener('popstate', checkAdminRoute);
+    window.addEventListener('hashchange', checkAdminRoute);
+
+    return () => {
+      window.removeEventListener('popstate', checkAdminRoute);
+      window.removeEventListener('hashchange', checkAdminRoute);
+    };
+  }, [user]);
+
   const handleOpenAuth = (tab: 'login' | 'register' = 'login') => {
     setAuthInitialTab(tab);
     setAuthModalOpen(true);

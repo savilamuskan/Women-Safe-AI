@@ -239,21 +239,6 @@ export async function handleClientBackendRequest(endpoint: string, options?: Req
       throw new Error('Invalid email or password');
     }
 
-    if (user.emailVerified === false) {
-      let code = user.verificationCode;
-      if (!code) {
-        code = Math.floor(100000 + Math.random() * 900000).toString();
-        user.verificationCode = code;
-        user.verificationCodeExpires = new Date(Date.now() + 15 * 60 * 1000).toISOString();
-        saveStoredUsers(users);
-      }
-      const err: any = new Error('Please verify your email address before logging in.');
-      err.requiresVerification = true;
-      err.email = cleanEmail;
-      err.devVerificationCode = code;
-      throw err;
-    }
-
     let isUserAdmin = user.role === 'admin';
     let isAdminVerified = false;
 
@@ -294,7 +279,7 @@ export async function handleClientBackendRequest(endpoint: string, options?: Req
     const users = getStoredUsers();
     const existing = users.find((u) => u.email.trim().toLowerCase() === cleanEmail);
     if (existing) {
-      throw new Error('An account with this email address already exists');
+      throw new Error('This email is already registered. Please sign in instead.');
     }
 
     let requestedRole: 'user' | 'admin' = (role === 'admin' || Boolean(adminPin)) ? 'admin' : 'user';
@@ -307,31 +292,26 @@ export async function handleClientBackendRequest(endpoint: string, options?: Req
       isAdminVerified = true;
     }
 
-    const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
-
     const newUser: StoredClientUser = {
       id: `usr_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       name: cleanName,
       email: cleanEmail,
       role: requestedRole,
       password: cleanPassword,
-      emailVerified: false,
-      verificationCode,
-      verificationCodeExpires: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+      emailVerified: true,
       created_at: new Date().toISOString(),
     };
 
     users.push(newUser);
     saveStoredUsers(users);
 
+    const jwtToken = generateClientToken(newUser.id, newUser.role, isAdminVerified);
     const { password: _, verificationCode: _vc, verificationCodeExpires: _vce, ...publicUser } = newUser;
 
     return {
-      message: 'Account created! Please enter the 6-digit verification code sent to your email.',
-      requiresVerification: true,
-      email: cleanEmail,
-      user: { ...publicUser, adminVerified: isAdminVerified, emailVerified: false },
-      devVerificationCode: verificationCode,
+      message: 'Registration successful! Welcome to WomenSafe AI.',
+      user: { ...publicUser, adminVerified: isAdminVerified, emailVerified: true },
+      token: jwtToken,
     };
   }
 
