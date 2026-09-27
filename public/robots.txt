@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://women-safe-ai-based.vercel.app/sitemap.xml
